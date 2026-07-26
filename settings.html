@@ -1,0 +1,291 @@
+{% extends "base.html" %}
+{% block title %}System - Cirkit Garden (Beta){% endblock %}
+{% block content %}
+<div class="d-flex flex-column flex-lg-row align-items-lg-end justify-content-between gap-3 mb-3">
+  <div>
+    <h1 class="h3 mb-1">System</h1>
+    <div class="muted">Diagnostics, recent errors, and local data visibility for this Cirkit Garden (<em>Beta</em>) instance.</div>
+  </div>
+  <div class="d-flex flex-wrap gap-2">
+    <a class="btn btn-outline-light btn-sm" href="{{ url_for('health') }}" target="_blank" rel="noopener">Open /health</a>
+    <a class="btn btn-outline-light btn-sm" href="{{ url_for('diag') }}" target="_blank" rel="noopener">Open /diag</a>
+  </div>
+</div>
+<div class="row g-3 mb-3">
+  <div class="col-md-6 col-xl-3">
+    <div class="card stat-card h-100">
+      <div class="card-header">Runtime</div>
+      <div class="card-body">
+        <div class="big-stat">{{ "MOCK" if system_info.mock else "LIVE" }}</div>
+        <div class="muted">App hardware mode</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-6 col-xl-3">
+    <div class="card stat-card h-100">
+      <div class="card-header">Health</div>
+      <div class="card-body">
+        <div class="big-stat {{ 'text-success' if system_info.health_ok else 'text-warning' }}">{{ 'OK' if system_info.health_ok else 'CHECK' }}</div>
+        <div class="muted">{{ system_info.health_issues|length }} issue(s) currently surfaced</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-6 col-xl-3">
+    <div class="card stat-card h-100">
+      <div class="card-header">Recent Errors</div>
+      <div class="card-body">
+        <div class="big-stat">{{ system_info.hw_errors|length }}</div>
+        <div class="muted">Stored in memory for this running process</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-6 col-xl-3">
+    <div class="card stat-card h-100">
+      <div class="card-header">Data Tables</div>
+      <div class="card-body">
+        <div class="big-stat">{{ system_info.db_tables|length }}</div>
+        <div class="muted">SQLite tables discovered</div>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="row g-3">
+  <div class="col-xl-6">
+    <div class="card h-100">
+      <div class="card-header">Diagnostics Summary</div>
+      <div class="card-body">
+        <div class="row g-3 small">
+          <div class="col-sm-6">
+            <div class="muted">Base directory</div>
+            <div class="text-break">{{ system_info.base_dir }}</div>
+          </div>
+          <div class="col-sm-6">
+            <div class="muted">Database path</div>
+            <div class="text-break">{{ system_info.db_path }}</div>
+          </div>
+          <div class="col-sm-6">
+            <div class="muted">Database exists</div>
+            <div>{{ 'Yes' if system_info.db_exists else 'No' }}</div>
+          </div>
+          <div class="col-sm-6">
+            <div class="muted">Database size</div>
+            <div>{% if system_info.db_size_bytes is not none %}{{ system_info.db_size_bytes }} bytes{% else %}Unavailable{% endif %}</div>
+          </div>
+          <div class="col-sm-6">
+            <div class="muted">Database last modified</div>
+            <div>{{ system_info.db_last_modified or 'Unavailable' }}</div>
+          </div>
+          <div class="col-sm-6">
+            <div class="muted">Secret key configured</div>
+            <div>{{ 'Yes' if system_info.env.FLASK_SECRET_KEY_set else 'No' }}</div>
+          </div>
+          <div class="col-sm-6">
+            <div class="muted">GARDENPI_MOCK env</div>
+            <div>{{ system_info.env.GARDENPI_MOCK if system_info.env.GARDENPI_MOCK is not none else 'Not set' }}</div>
+          </div>
+          <div class="col-sm-6">
+            <div class="muted">Pump threshold rule</div>
+            <div>ON if below {{ pump_rule }} V</div>
+          </div>
+        </div>
+        <hr>
+        <div class="muted mb-2">Health issues</div>
+        {% if system_info.health_issues %}
+          <ul class="mb-0 small">
+            {% for issue in system_info.health_issues %}
+              <li>{{ issue }}</li>
+            {% endfor %}
+          </ul>
+        {% else %}
+          <div class="muted">No health issues currently surfaced.</div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+  <div class="col-xl-6">
+    <div class="card h-100">
+      <div class="card-header">Data & Logs</div>
+      <div class="card-body">
+        <div class="row g-3 mb-3">
+          <div class="col-sm-6">
+            <div class="muted">Users</div>
+            <div class="h5 mb-0">{{ system_info.record_counts.get('users', 0) }}</div>
+          </div>
+          <div class="col-sm-6">
+            <div class="muted">Settings rows</div>
+            <div class="h5 mb-0">{{ system_info.record_counts.get('settings', 0) }}</div>
+          </div>
+          <div class="col-sm-6">
+            <div class="muted">Gardens</div>
+            <div class="h5 mb-0">{{ system_info.record_counts.get('gardens', 0) }}</div>
+          </div>
+          <div class="col-sm-6">
+            <div class="muted">Devices</div>
+            <div class="h5 mb-0">{{ system_info.record_counts.get('devices', 0) }}</div>
+          </div>
+          <div class="col-sm-6">
+            <div class="muted">Sensor readings</div>
+            <div class="h5 mb-0">{{ system_info.record_counts.get('sensor_readings', 0) }}</div>
+          </div>
+          <div class="col-sm-6">
+            <div class="muted">Pump events</div>
+            <div class="h5 mb-0">{{ system_info.record_counts.get('pump_events', 0) }}</div>
+          </div>
+        </div>
+        <div class="muted mb-2">Detected log-style tables</div>
+        {% if system_info.log_tables %}
+          <div class="d-flex flex-wrap gap-2 mb-3">
+            {% for table_name in system_info.log_tables %}
+              <span class="badge rounded-pill text-bg-secondary">{{ table_name }}</span>
+            {% endfor %}
+          </div>
+        {% else %}
+          <div class="alert alert-info py-2 small mb-3">
+            No dedicated log/history/reading tables were detected yet. Current persistent data is mainly configuration and device inventory.
+          </div>
+        {% endif %}
+        <div class="muted mb-2">All database tables</div>
+        {% if system_info.db_tables %}
+          <div class="d-flex flex-wrap gap-2">
+            {% for table_name in system_info.db_tables %}
+              <span class="badge badge-soft rounded-pill">{{ table_name }}</span>
+            {% endfor %}
+          </div>
+        {% else %}
+          <div class="muted">No tables found.</div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+  <div class="col-xl-6">
+    <div class="card h-100">
+      <div class="card-header">Recent Errors</div>
+      <div class="card-body">
+        {% if system_info.hw_errors %}
+          <ul class="mb-0 small">
+            {% for err in system_info.hw_errors %}
+              <li>{{ err }}</li>
+            {% endfor %}
+          </ul>
+        {% else %}
+          <div class="muted">No recent hardware/runtime errors captured in memory.</div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+  <div class="col-xl-6">
+    <div class="card h-100">
+      <div class="card-header">Recent Data Inventory</div>
+      <div class="card-body">
+        <div class="mb-3">
+          <div class="muted mb-2">Latest gardens</div>
+          {% if system_info.recent_gardens %}
+            <ul class="mb-0 small">
+              {% for garden in system_info.recent_gardens %}
+                <li>
+                  <strong>{{ garden.name }}</strong>
+                  <span class="muted">(#{{ garden.id }}, {{ garden.location|capitalize }}, {{ garden.created_at }})</span>
+                </li>
+              {% endfor %}
+            </ul>
+          {% else %}
+            <div class="muted small">No garden records found.</div>
+          {% endif %}
+        </div>
+        <div>
+          <div class="muted mb-2">Latest devices</div>
+          {% if system_info.recent_devices %}
+            <ul class="mb-0 small">
+              {% for device in system_info.recent_devices %}
+                <li>
+                  <strong>{{ device.device_label or device.display_device_type_label or device.device_type }}</strong>
+                  <span class="muted">in {{ device.garden_name }} · {{ device.display_device_type_label or device.device_type }} / {{ device.display_sensor_type_label or device.sensor_type }} · {{ device.display_channel_label or ('AIN' ~ device.channel) }} · {{ device.created_at }}</span>
+                </li>
+              {% endfor %}
+            </ul>
+          {% else %}
+            <div class="muted small">No device records found.</div>
+          {% endif %}
+        </div>
+    </div>
+  </div>
+  <div class="col-12">
+    <div class="card">
+      <div class="card-header">Recent Sensor Readings</div>
+      <div class="card-body">
+        {% if system_info.recent_sensor_readings %}
+          <div class="table-responsive">
+            <table class="table table-sm align-middle mb-0">
+              <thead>
+                <tr>
+                  <th>Time</th>
+                  <th>Garden</th>
+                  <th>Channel</th>
+                  <th>Type</th>
+                  <th>Voltage</th>
+                  <th>State</th>
+                  <th>Wet %</th>
+                  <th>Pump Request</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for reading in system_info.recent_sensor_readings %}
+                  <tr>
+                    <td>{{ reading.created_at }}</td>
+                    <td>{{ reading.garden_name }}</td>
+                    <td>AIN{{ reading.channel }}</td>
+                    <td>{{ reading.sensor_type }}</td>
+                    <td>{% if reading.voltage is not none %}{{ '%.3f'|format(reading.voltage) }} V{% else %}--{% endif %}</td>
+                    <td>{{ reading.label or reading.state or '--' }}</td>
+                    <td>{% if reading.wet_percent is not none %}{{ '%.1f'|format(reading.wet_percent) }}{% else %}--{% endif %}</td>
+                    <td>{{ 'Yes' if reading.pump_request else 'No' }}</td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        {% else %}
+          <div class="muted">No sensor readings have been logged yet.</div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+  <div class="col-12">
+    <div class="card">
+      <div class="card-header">Recent Pump Events</div>
+      <div class="card-body">
+        {% if system_info.recent_pump_events %}
+          <div class="table-responsive">
+            <table class="table table-sm align-middle mb-0">
+              <thead>
+                <tr>
+                  <th>Time</th>
+                  <th>Garden</th>
+                  <th>Pump State</th>
+                  <th>Reason</th>
+                  <th>Output Active</th>
+                  <th>Target</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for event in system_info.recent_pump_events %}
+                  <tr>
+                    <td>{{ event.created_at }}</td>
+                    <td>{{ event.garden_name }}</td>
+                    <td>{{ event.pump_state }}</td>
+                    <td>{{ event.pump_reason }}</td>
+                    <td>{{ 'Yes' if event.output_active else 'No' }}</td>
+                    <td><code>{{ event.pump_target_json }}</code></td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        {% else %}
+          <div class="muted">No pump events have been logged yet.</div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

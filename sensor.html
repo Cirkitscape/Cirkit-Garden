@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block title %}Sensors{% endblock %}
+{% block page_title %}Sensors{% endblock %}
+{% block page_subtitle %}Configure analog channels{% endblock %}
+
+{% block content %}
+<div class="card page-card p-4">
+  <h3 class="mb-3">Sensor Configuration</h3>
+
+  <form method="post" action="{{ url_for('configure') }}">
+    <div class="table-responsive">
+      <table class="table align-middle">
+        <thead>
+          <tr>
+            <th>Channel</th>
+            <th>Enabled</th>
+            <th>Type</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for ch in channels %}
+          <tr>
+            <td>AIN{{ ch }}</td>
+            <td>
+              <input class="form-check-input" type="checkbox" name="ch{{ ch }}_enabled"
+                     {% if cfg[ch].enabled %}checked{% endif %}>
+            </td>
+            <td>
+              <select class="form-select" name="ch{{ ch }}_type">
+                <option value="disabled" {% if cfg[ch].type == 'disabled' %}selected{% endif %}>Disabled</option>
+                <option value="moisture_resistive" {% if cfg[ch].type in ['moisture', 'moisture_resistive'] %}selected{% endif %}>Resistive Soil Moisture</option>
+                <option value="moisture_capacitive" {% if cfg[ch].type == 'moisture_capacitive' %}selected{% endif %}>Capacitive Soil Moisture</option>
+                <option value="level" {% if cfg[ch].type == 'level' %}selected{% endif %}>Level (IR)</option>
+              </select>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <div class="mt-3">
+      <button class="btn btn-primary" type="submit">Save Sensor Settings</button>
+    </div>
+  </form>
+
+  <hr>
+
+  <div class="small text-muted">
+    <div>Moisture scale: Wet ≥ {{ "%.3f"|format(soil_range.wet) }} V, Dry ≤ {{ "%.3f"|format(soil_range.dry) }} V</div>
+    <div>Pump rule: ON if voltage &lt; {{ "%.3f"|format(pump_rule) }} V</div>
+    <div>IR level thresholds: Water present ≤ {{ "%.3f"|format(ir_thresholds.present_max_v) }} V, refill ≥ {{ "%.3f"|format(ir_thresholds.refill_min_v) }} V</div>
+  </div>
+</div>
+{% endblock %}

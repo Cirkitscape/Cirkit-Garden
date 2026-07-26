@@ -1,0 +1,230 @@
+{% extends "base.html" %}
+{% block title %}Schedules - Cirkit Garden (Beta){% endblock %}
+{% block content %}
+<h1 class="h3 mb-3">Schedules</h1>
+<p class="muted mb-4">Each schedule stays attached to its garden. This page shows all assigned garden schedules in one place.</p>
+<div class="row g-3 mb-4">
+  <div class="col-md-4">
+    <div class="card h-100">
+      <div class="card-body">
+        <div class="muted small text-uppercase">Gardens</div>
+        <div class="display-6" id="scheduleGardenCount">{{ garden_schedules|length }}</div>
+        <div class="muted" id="scheduleGardenCountDetail">Configured gardens</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="card h-100">
+      <div class="card-body">
+        <div class="muted small text-uppercase">Armed Schedules</div>
+        <div class="display-6" id="armedScheduleCount">0</div>
+        <div class="muted" id="armedScheduleDetail">Loading status...</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="card h-100">
+      <div class="card-body">
+        <div class="muted small text-uppercase">Active Now</div>
+        <div class="display-6" id="activeScheduleCount">0</div>
+        <div class="muted" id="activeScheduleDetail">Loading status...</div>
+      </div>
+    </div>
+  </div>
+</div>
+{% if garden_schedules %}
+  <div class="d-grid gap-3">
+    {% for item in garden_schedules %}
+      {% set garden = item.garden %}
+      {% set schedule_cfg = item.schedule_cfg %}
+      {% set manual_override = item.manual_override %}
+      <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center gap-3 flex-wrap">
+          <div>
+            <div class="fw-semibold">{{ garden.name }}</div>
+            <div class="muted small">
+              {{ garden.location|default('unknown', true)|replace('_', ' ')|title }}
+              {% if garden.pump_target %}
+                · {{ garden.pump_target.controller|replace('_', ' ')|title }}
+                {% if garden.pump_target.controller == 'pi_gpio' and garden.pump_target.pin is not none %}
+                  GPIO {{ garden.pump_target.pin }}
+                {% elif garden.pump_target.bank and garden.pump_target.bit is not none %}
+                  {{ garden.pump_target.bank }}{{ garden.pump_target.bit }}
+                {% endif %}
+              {% endif %}
+            </div>
+          </div>
+          <div class="d-flex align-items-center gap-2 flex-wrap justify-content-end">
+            <span class="badge text-bg-secondary" id="schedState-{{ garden.id }}">{{ 'ARMED' if schedule_cfg.enabled else 'OFF' }}</span>
+            <a class="btn btn-sm btn-outline-light" href="{{ url_for('garden_detail', garden_id=garden.id) }}">Open Garden</a>
+          </div>
+        </div>
+        <div class="card-body">
+          <div class="row g-3 mb-4">
+            <div class="col-md-4">
+              <div class="muted small text-uppercase">Window</div>
+              <div class="fw-semibold" id="schedWindow-{{ garden.id }}">{{ schedule_cfg.start }} - {{ schedule_cfg.stop }}</div>
+              <div class="muted small" id="schedDays-{{ garden.id }}">
+                {% set enabled_days = [] %}
+                {% for d in day_keys %}
+                  {% if schedule_cfg.days[d] %}
+                    {% set _ = enabled_days.append(d|upper) %}
+                  {% endif %}
+                {% endfor %}
+                {{ enabled_days|join(', ') if enabled_days else 'No days selected' }}
+              </div>
+            </div>
+            <div class="col-md-4">
+              <div class="muted small text-uppercase">Schedule Mode</div>
+              <div class="fw-semibold" id="schedMode-{{ garden.id }}">{{ 'Pump ON during window' if schedule_cfg.pump_mode == 'on' else 'Pump OFF during window' }}</div>
+              <div class="muted small" id="autoWaterState-{{ garden.id }}">
+                Auto-water {{ 'enabled' if item.auto_water_enabled else 'disabled' }}
+              </div>
+            </div>
+            <div class="col-md-4">
+              <div class="muted small text-uppercase">Manual Override</div>
+              <div class="fw-semibold" id="manualState-{{ garden.id }}">
+                {% if manual_override.enabled %}
+                  {{ 'FORCED ON' if manual_override.requested_on else 'FORCED OFF' }}
+                {% else %}
+                  OFF
+                {% endif %}
+              </div>
+              <div class="muted small" id="schedDetail-{{ garden.id }}">Live status refreshes automatically</div>
+            </div>
+          </div>
+          <form method="post" action="{{ url_for('save_garden_schedule', garden_id=garden.id) }}">
+            <input type="hidden" name="next_url" value="{{ request.path }}">
+            <div class="row g-3">
+              <div class="col-md-6">
+                <label class="form-label">Start Time</label>
+                <input class="form-control" type="time" step="1" name="schedule_start" value="{{ schedule_cfg.start }}">
+              </div>
+              <div class="col-md-6">
+                <label class="form-label">Stop Time</label>
+                <input class="form-control" type="time" step="1" name="schedule_stop" value="{{ schedule_cfg.stop }}">
+              </div>
+            </div>
+            <div class="mt-3">
+              <label class="form-label">Pump Mode</label>
+              <select class="form-select" name="schedule_pump_mode">
+                <option value="on" {% if schedule_cfg.pump_mode == 'on' %}selected{% endif %}>Pump ON during window</option>
+                <option value="off" {% if schedule_cfg.pump_mode == 'off' %}selected{% endif %}>Pump OFF during window</option>
+              </select>
+            </div>
+            <div class="form-check mt-3">
+              <input class="form-check-input" type="checkbox" name="schedule_autowater_enabled" {% if schedule_cfg.autowater_enabled %}checked{% endif %}>
+              <label class="form-check-label">Enable auto-water during schedule window</label>
+            </div>
+            <div class="form-check mt-2">
+              <input class="form-check-input" type="checkbox" name="auto_water_enabled" {% if item.auto_water_enabled %}checked{% endif %}>
+              <label class="form-check-label">Enable auto-water for this garden</label>
+            </div>
+            <hr>
+            <label class="form-label">Active Days</label>
+            <div class="row">
+              {% for d in day_keys %}
+                <div class="col-md-3 col-6">
+                  <div class="form-check mb-2">
+                    <input class="form-check-input" type="checkbox" name="day_{{ d }}" {% if schedule_cfg.days[d] %}checked{% endif %}>
+                    <label class="form-check-label text-uppercase">{{ d }}</label>
+                  </div>
+                </div>
+              {% endfor %}
+            </div>
+            <div class="d-flex gap-2 flex-wrap mt-3">
+              <button class="btn btn-success" type="submit">Save {{ garden.name }} Schedule</button>
+              <button class="btn btn-outline-light" type="button" onclick="toggleSchedule({{ garden.id }}, true)">Arm</button>
+              <button class="btn btn-outline-danger" type="button" onclick="toggleSchedule({{ garden.id }}, false)">Disarm</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    {% endfor %}
+  </div>
+{% else %}
+  <div class="card">
+    <div class="card-body">
+      <div class="fw-semibold mb-2">No gardens configured yet</div>
+      <div class="muted mb-3">Add a garden first, then its schedule will appear here.</div>
+      <a class="btn btn-outline-light" href="{{ url_for('garden') }}">Go to Garden Setup</a>
+    </div>
+  </div>
+{% endif %}
+{% endblock %}
+{% block scripts %}
+<script>
+function esc(value){
+  return String(value ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+}
+function setBadge(el, label, kind){
+  if (!el) return;
+  el.textContent = label;
+  el.className = `badge text-bg-${kind}`;
+}
+function summarizeDays(days){
+  const order = ['mon','tue','wed','thu','fri','sat','sun'];
+  const enabled = order.filter(day => days && days[day]).map(day => day.toUpperCase());
+  return enabled.length ? enabled.join(', ') : 'No days selected';
+}
+async function refreshSchedules(){
+  const response = await fetch('{{ url_for("dashboard_status") }}');
+  const data = await response.json();
+  const gardens = data.garden_statuses || [];
+  const summary = data.summary || {};
+  document.getElementById('scheduleGardenCount').textContent = gardens.length;
+  document.getElementById('scheduleGardenCountDetail').textContent = gardens.length ? 'Gardens with schedule slots' : 'No gardens configured';
+  document.getElementById('armedScheduleCount').textContent = summary.armed_schedules ?? 0;
+  document.getElementById('armedScheduleDetail').textContent = (summary.armed_schedules ?? 0) ? 'Schedules currently armed' : 'No schedules armed';
+  const activeNow = gardens.filter(item => ((item.result || {}).schedule || {}).active_now).length;
+  document.getElementById('activeScheduleCount').textContent = activeNow;
+  document.getElementById('activeScheduleDetail').textContent = activeNow ? 'Schedule windows active now' : 'No active windows right now';
+  for (const item of gardens){
+    const garden = item.garden || {};
+    const result = item.result || {};
+    const schedule = result.schedule || {};
+    const manual = result.manual_override || {};
+    const stateEl = document.getElementById(`schedState-${garden.id}`);
+    const detailEl = document.getElementById(`schedDetail-${garden.id}`);
+    const windowEl = document.getElementById(`schedWindow-${garden.id}`);
+    const daysEl = document.getElementById(`schedDays-${garden.id}`);
+    const modeEl = document.getElementById(`schedMode-${garden.id}`);
+    const manualEl = document.getElementById(`manualState-${garden.id}`);
+    const autoWaterEl = document.getElementById(`autoWaterState-${garden.id}`);
+    if (windowEl) windowEl.textContent = `${schedule.start || '--'} - ${schedule.stop || '--'}`;
+    if (daysEl) daysEl.textContent = summarizeDays(schedule.days || {});
+    if (modeEl) modeEl.textContent = schedule.pump_mode === 'off' ? 'Pump OFF during window' : 'Pump ON during window';
+    if (autoWaterEl) autoWaterEl.textContent = `Auto-water ${result.auto_water_enabled ? 'enabled' : 'disabled'}`;
+    if (manualEl){
+      if (manual.enabled){
+        manualEl.textContent = manual.requested_on ? 'FORCED ON' : 'FORCED OFF';
+      } else {
+        manualEl.textContent = 'OFF';
+      }
+    }
+    if (schedule.enabled){
+      setBadge(stateEl, schedule.active_now ? 'ARMED / ACTIVE' : 'ARMED', schedule.active_now ? 'success' : 'primary');
+    } else {
+      setBadge(stateEl, 'OFF', 'secondary');
+    }
+    if (detailEl){
+      const parts = [];
+      if (result.pump_state) parts.push(`Pump ${result.pump_state}`);
+      if (result.pump_reason) parts.push(result.pump_reason);
+      if ((result.interlock || {}).active) parts.push('Interlock active');
+      detailEl.textContent = parts.length ? parts.join(' · ') : 'Idle';
+    }
+  }
+}
+async function toggleSchedule(gardenId, enabled){
+  await fetch(`/garden/${gardenId}/schedule/toggle`, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({enabled})
+  });
+  refreshSchedules();
+}
+refreshSchedules();
+setInterval(refreshSchedules, 2000);
+</script>
+{% endblock %}

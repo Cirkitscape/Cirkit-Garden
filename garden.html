@@ -1,0 +1,164 @@
+{% extends "base.html" %}
+{% block title %}Garden - Cirkit Garden (Beta){% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div>
+    <h1 class="h3 mb-1">Garden</h1>
+    <div class="muted">Manage your gardens and open each garden for device details.</div>
+  </div>
+  <button class="btn btn-success" data-bs-toggle="modal" data-bs-target="#addGardenModal">
+    + Add Garden
+  </button>
+</div>
+<div class="card mb-4">
+  <div class="card-header">Manual Pump Override</div>
+  <div class="card-body">
+    <div class="muted mb-3">Manual pump control is garden-specific now. Pick a garden, or open the garden directly for its control panel.</div>
+    {% if gardens and gardens|length > 0 %}
+    <div class="row g-2 align-items-end">
+      <div class="col-lg-5">
+        <label class="form-label">Target Garden</label>
+        <select class="form-select" id="manualGardenId">
+          {% for g in gardens %}
+          <option value="{{ g.id }}">{{ g.name }}{% if g.location %} — {{ g.location }}{% endif %}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-lg-7">
+        <div class="d-grid gap-2 d-md-flex">
+          <button class="btn btn-success" type="button" onclick="setPump(true)">Pump ON</button>
+          <button class="btn btn-secondary" type="button" onclick="setPump(false)">Pump OFF</button>
+          <button class="btn btn-outline-light" type="button" onclick="clearManual()">Clear Manual Override</button>
+        </div>
+      </div>
+    </div>
+    <div class="form-text mt-2">These buttons now target the selected garden only.</div>
+    {% else %}
+    <div class="muted">Add a garden first to use manual pump override.</div>
+    {% endif %}
+  </div>
+</div>
+{% if gardens and gardens|length > 0 %}
+  <div class="row g-3">
+    {% for g in gardens %}
+      <div class="col-md-6 col-lg-4">
+        <div class="card h-100 hover-lift">
+          <div class="card-header d-flex justify-content-between align-items-center">
+            <span>{{ g.name }}</span>
+            <span class="badge bg-secondary text-uppercase">{{ g.location }}</span>
+          </div>
+          <div class="card-body">
+            <a href="{{ url_for('garden_detail', garden_id=g.id) }}" class="card-link-wrap">
+              <div class="mb-2">
+                <div class="muted small">Primary Device</div>
+                <div>
+                  {{ device_type_labels.get(g.device_type, g.device_type|replace("_", " ")|title) }}
+                  {% if g.device_label %}
+                    - {{ g.device_label }}
+                  {% endif %}
+                </div>
+              </div>
+              <div class="mb-2">
+                <div class="muted small">Primary Sensor</div>
+                <div>
+                  {{ sensor_type_labels.get(g.sensor_type, g.sensor_type|replace("_", " ")|title) }}
+                  {% if g.sensor_name %}
+                    - {{ g.sensor_name }}
+                  {% endif %}
+                </div>
+              </div>
+              <div>
+                <div class="muted small">Channel</div>
+                {% if g.sensor_type != "disabled" %}<div>AIN{{ g.channel }}</div>{% else %}<div>Not assigned</div>{% endif %}
+              </div>
+            </a>
+          </div>
+          <div class="card-footer bg-transparent border-top-0 d-flex gap-2">
+            <a href="{{ url_for('garden_detail', garden_id=g.id) }}" class="btn btn-outline-light btn-sm w-100">
+              Open
+            </a>
+            <form method="post"
+                  action="{{ url_for('delete_garden', garden_id=g.id) }}"
+                  class="w-100"
+                  onsubmit="return confirm('Delete this garden and all attached devices?');">
+              <button type="submit" class="btn btn-outline-danger btn-sm w-100">
+                Delete
+              </button>
+            </form>
+          </div>
+        </div>
+      </div>
+    {% endfor %}
+  </div>
+{% else %}
+  <div class="card">
+    <div class="card-body text-center py-5">
+      <div class="display-5 mb-3">+</div>
+      <h2 class="h5 mb-2">No gardens yet</h2>
+      <p class="muted mb-4">
+        Create your first garden to start organizing sensors and devices.
+      </p>
+      <button class="btn btn-success" data-bs-toggle="modal" data-bs-target="#addGardenModal">
+        + Add Garden
+      </button>
+    </div>
+  </div>
+{% endif %}
+<div class="modal fade" id="addGardenModal" tabindex="-1" aria-labelledby="addGardenModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="addGardenModalLabel">Add Garden</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <form method="post" action="{{ url_for('garden_add') }}">
+        <div class="modal-body">
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label class="form-label">Garden Name</label>
+              <input class="form-control" name="name" required>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Indoor / Outdoor</label>
+              <select class="form-select" name="location" required>
+                <option value="indoor">Indoor</option>
+                <option value="outdoor">Outdoor</option>
+              </select>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-light" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-success">Create Garden</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+function selectedGardenId(){
+  const el = document.getElementById('manualGardenId');
+  return el ? el.value : null;
+}
+async function postManualOverride(enabled, requestedOn){
+  const gardenId = selectedGardenId();
+  if (!gardenId){
+    alert('Select a garden first.');
+    return;
+  }
+  const response = await fetch('/pump/manual',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({garden_id:gardenId,enabled:enabled,requested_on:requestedOn})
+  });
+  const data = await response.json();
+  if (!response.ok && data && data.error){
+    alert(data.error);
+  }
+}
+async function setPump(on){ await postManualOverride(true, on); }
+async function clearManual(){ await postManualOverride(false, false); }
+</script>
+{% endblock %}

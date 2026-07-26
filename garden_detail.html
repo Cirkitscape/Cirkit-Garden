@@ -1,0 +1,402 @@
+{% extends "base.html" %}
+{% block title %}{{ garden.name }} - Cirkit Garden (Beta){% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div><h1 class="h3 mb-1">{{ garden.name }}</h1><div class="muted">{{ garden.location|capitalize }} garden</div></div>
+  <div class="d-flex gap-2"><a href="{{ url_for('garden') }}" class="btn btn-outline-light">Back to Gardens</a><button class="btn btn-success" data-bs-toggle="modal" data-bs-target="#addDeviceModal">+ Add Device</button></div>
+</div>
+<div class="row g-3 mb-4"><div class="col-md-4"><div class="card"><div class="card-header">Garden Info</div><div class="card-body"><div class="mb-2"><span class="muted">Primary Device:</span><br>{{ device_type_labels.get(garden.device_type, garden.device_type|replace("_", " ")|title) }}{% if garden.device_label %} - {{ garden.device_label }}{% endif %}</div><div class="mb-2"><span class="muted">Primary Sensor:</span><br>{{ sensor_type_labels.get(garden.sensor_type, garden.sensor_type|replace("_", " ")|title) }}{% if garden.sensor_name %} - {{ garden.sensor_name }}{% endif %}</div></div></div></div><div class="col-md-8"><div class="card"><div class="card-header">Sensors / Devices</div><div class="card-body">{% if devices %}<div class="table-responsive"><table class="table align-middle"><thead><tr><th>Device</th><th>Sensor</th><th>Delete</th></tr></thead><tbody>{% for d in devices %}<tr><td>{{ d.display_device_type_label or device_type_labels.get(d.device_type, d.device_type|replace("_", " ")|title) }}{% if d.device_label %} - {{ d.device_label }}{% endif %}</td><td>{{ d.display_sensor_type_label or sensor_type_labels.get(d.sensor_type, d.sensor_type|replace("_", " ")|title) }}{% if d.sensor_name and d.device_type != 'motor' %} - {{ d.sensor_name }}{% endif %}</td><td><form method="post" action="{{ url_for('delete_garden_device', garden_id=garden.id, device_id=d.id) }}" onsubmit="return confirm('Delete this device?');"><button class="btn btn-sm btn-outline-danger">Delete</button></form></td></tr>{% endfor %}</tbody></table></div>{% else %}<div class="muted">No extra devices added to this garden yet.</div>{% endif %}</div></div></div></div>
+<div class="card mb-4"><div class="card-header">Pump Assignment</div><div class="card-body"><form method="post" action="{{ url_for('save_garden_pump_assignment', garden_id=garden.id) }}"><div class="row g-3"><div class="col-lg-4"><label class="form-label">Controller</label><select class="form-select" name="pump_controller" id="pumpControllerSelect"><option value="{{ pump_controllers.mcp23017 }}" {% if garden.pump_target.controller == pump_controllers.mcp23017 %}selected{% endif %}>MCP23017 Expander</option><option value="{{ pump_controllers.pi_gpio }}" {% if garden.pump_target.controller == pump_controllers.pi_gpio %}selected{% endif %}>Raspberry Pi GPIO</option></select><div class="form-text">Each garden must use a unique pump output.</div></div><div class="col-lg-8"><div class="alert alert-secondary py-2 mb-0"><strong>Current target:</strong> {% if garden.pump_target.controller == pump_controllers.pi_gpio %}Pi GPIO {{ garden.pump_target.pin if garden.pump_target.pin is not none else 'not set' }}{% else %}MCP23017 bank {{ garden.pump_target.bank or 'not set' }}, bit {{ garden.pump_target.bit if garden.pump_target.bit is not none else 'not set' }}{% endif %}</div></div><div class="col-md-6" id="pumpPiFields"><label class="form-label">BCM GPIO Pin</label><input class="form-control" type="number" min="0" max="27" name="pump_pi_gpio" value="{{ garden.pump_target.pin if garden.pump_target.pin is not none else '' }}" placeholder="17"></div><div class="col-md-3" id="pumpMcpBankField"><label class="form-label">MCP Bank</label><select class="form-select" name="pump_mcp_bank">{% for bank in mcp_banks %}<option value="{{ bank }}" {% if garden.pump_target.bank == bank %}selected{% endif %}>{{ bank }}</option>{% endfor %}</select></div><div class="col-md-3" id="pumpMcpBitField"><label class="form-label">MCP Bit</label><input class="form-control" type="number" min="0" max="7" name="pump_mcp_bit" value="{{ garden.pump_target.bit if garden.pump_target.bit is not none else '' }}" placeholder="0"></div><div class="col-12"><button class="btn btn-success" type="submit">Save Pump Assignment</button></div></div></form></div></div>
+<div class="card"><div class="card-header">Live Channel Summary</div><div class="card-body"><div id="gardenStatus" class="muted">Loading live status...</div></div></div>
+
+<div class="row g-3 mt-1">
+  <div class="col-lg-7">
+    <div class="card h-100">
+      <div class="card-header">Schedule Settings</div>
+      <div class="card-body">
+        <form method="post" action="{{ url_for('save_garden_schedule', garden_id=garden.id) }}">
+          <input type="hidden" name="next_url" value="{{ request.path }}">
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label class="form-label">Start Time</label>
+              <input class="form-control" type="time" step="1" name="schedule_start" value="{{ schedule_cfg.start }}">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Stop Time</label>
+              <input class="form-control" type="time" step="1" name="schedule_stop" value="{{ schedule_cfg.stop }}">
+            </div>
+          </div>
+          <div class="mt-3">
+            <label class="form-label">Pump Mode</label>
+            <select class="form-select" name="schedule_pump_mode">
+              <option value="on" {% if schedule_cfg.pump_mode == 'on' %}selected{% endif %}>Pump ON during window</option>
+              <option value="off" {% if schedule_cfg.pump_mode == 'off' %}selected{% endif %}>Pump OFF during window</option>
+            </select>
+          </div>
+          <div class="form-check mt-3">
+            <input class="form-check-input" type="checkbox" name="schedule_autowater_enabled" {% if schedule_cfg.autowater_enabled %}checked{% endif %}>
+            <label class="form-check-label">Enable auto-water during schedule window</label>
+          </div>
+          <div class="form-check mt-2">
+            <input class="form-check-input" type="checkbox" name="auto_water_enabled" {% if auto_water_enabled %}checked{% endif %}>
+            <label class="form-check-label">Enable auto-water for this garden</label>
+          </div>
+          <hr>
+          <label class="form-label">Active Days</label>
+          <div class="row">
+            {% for d in day_keys %}
+            <div class="col-md-3 col-6">
+              <div class="form-check mb-2">
+                <input class="form-check-input" type="checkbox" name="day_{{ d }}" {% if schedule_cfg.days[d] %}checked{% endif %}>
+                <label class="form-check-label text-uppercase">{{ d }}</label>
+              </div>
+            </div>
+            {% endfor %}
+          </div>
+          <button class="btn btn-success mt-3" type="submit">Save Schedule</button>
+        </form>
+      </div>
+    </div>
+  </div>
+  <div class="col-lg-5">
+    <div class="card h-100">
+      <div class="card-header">Pump Control</div>
+      <div class="card-body">
+        <div class="mb-3">
+          <div class="muted">Schedule State</div>
+          <div class="h4 mb-0" id="schedState">{{ 'ARMED' if schedule_cfg.enabled else 'OFF' }}</div>
+        </div>
+        <div class="mb-3">
+          <div class="muted">Manual Override</div>
+          <div class="small" id="manualState">{% if manual_override.enabled %}{{ 'FORCED ON' if manual_override.requested_on else 'FORCED OFF' }}{% else %}CLEAR{% endif %}</div>
+        </div>
+        <div class="d-grid gap-2 mb-3">
+          <button class="btn btn-success" type="button" onclick="toggleSchedule(true)">Arm Schedule</button>
+          <button class="btn btn-outline-light" type="button" onclick="toggleSchedule(false)">Disarm Schedule</button>
+        </div>
+        <div class="d-grid gap-2 mb-3">
+          <button class="btn btn-warning" type="button" onclick="setGardenPumpManual(true, true)">Manual Pump ON</button>
+          <button class="btn btn-outline-warning" type="button" onclick="setGardenPumpManual(true, false)">Manual Pump OFF</button>
+          <button class="btn btn-outline-light" type="button" onclick="setGardenPumpManual(false, false)">Clear Manual Override</button>
+        </div>
+        <div class="d-grid gap-2">
+          <button class="btn btn-outline-success" type="button" onclick="toggleGardenAutoWater(true)">Enable Garden Auto-Water</button>
+          <button class="btn btn-outline-light" type="button" onclick="toggleGardenAutoWater(false)">Disable Garden Auto-Water</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% if has_wifi_nodes %}
+<div class="card mt-4">
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <span>Live Node Summary</span>
+    <button class="btn btn-sm btn-outline-light" onclick="loadPicoNodes()">Refresh</button>
+  </div>
+  <div class="card-body">
+    <div id="picoNodes" class="muted">Loading live node status...</div>
+  </div>
+</div>
+{% endif %}
+
+<div class="modal fade" id="addDeviceModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Add Device to {{ garden.name }}</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <form method="post" action="{{ url_for('add_garden_device', garden_id=garden.id) }}">
+        <div class="modal-body">
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label class="form-label">Sensor or node?</label>
+              <select class="form-select" name="device_kind" id="deviceKindSelect" required>
+                <option value="sensor">Sensor</option>
+                <option value="node">Node</option>
+              </select>
+            </div>
+
+            <div id="sensorFields" class="col-12">
+              <div class="row g-3">
+                <div class="col-md-6">
+                  <label class="form-label">What type of sensor?</label>
+                  <select class="form-select" name="sensor_type" id="sensorTypeSelect">
+                    <option value="liquid">Liquid Sensor</option>
+                    <option value="level">IR Liquid Sensor</option>
+                    <option value="moisture_resistive">Resistive Soil Moisture Sensor</option>
+                    <option value="moisture_capacitive">Capacitive Soil Moisture Sensor</option>
+                    <option value="dht11">DHT11 Temperature / Humidity Sensor</option>
+                  </select>
+                </div>
+                <div class="col-md-6">
+                  <label class="form-label">What channel is the sensor on?</label>
+                  <select class="form-select" name="channel" id="sensorChannelSelect">
+                    {% for ch in channels %}
+                    <option value="{{ ch }}">AIN{{ ch }}</option>
+                    {% endfor %}
+                  </select>
+                </div>
+                <div class="col-12">
+                  <label class="form-label">Sensor Name</label>
+                  <input class="form-control" name="sensor_name" placeholder="Optional sensor label">
+                </div>
+              </div>
+            </div>
+
+            <div id="nodeFields" class="col-12">
+              <div class="row g-3">
+                <div class="col-md-6">
+                  <label class="form-label">What kind of node?</label>
+                  <select class="form-select" name="node_type" id="nodeTypeSelect">
+                    <option value="pico">Raspberry Pi Pico</option>
+                    <option value="rpi">Raspberry Pi Zero-5 with Top HAT</option>
+                  </select>
+                </div>
+                <div class="col-md-6">
+                  <label class="form-label">What is the IP address of the node?</label>
+                  <input class="form-control" name="ip_address" id="nodeIpAddress" placeholder="192.168.1.60">
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-light" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-success">Add Device</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+function syncPumpAssignmentFields(){
+  const select = document.getElementById('pumpControllerSelect');
+  const piFields = document.getElementById('pumpPiFields');
+  const mcpBankField = document.getElementById('pumpMcpBankField');
+  const mcpBitField = document.getElementById('pumpMcpBitField');
+  if (!select || !piFields || !mcpBankField || !mcpBitField) return;
+
+  const usePi = select.value === '{{ pump_controllers.pi_gpio }}';
+  piFields.style.display = usePi ? '' : 'none';
+  mcpBankField.style.display = usePi ? 'none' : '';
+  mcpBitField.style.display = usePi ? 'none' : '';
+}
+
+const deviceKindSelect = document.getElementById('deviceKindSelect');
+if (deviceKindSelect) deviceKindSelect.addEventListener('change', syncAddDeviceFields);
+
+function syncAddDeviceFields(){
+  const kindSelect = document.getElementById('deviceKindSelect');
+  const sensorFields = document.getElementById('sensorFields');
+  const nodeFields = document.getElementById('nodeFields');
+  const sensorTypeSelect = document.getElementById('sensorTypeSelect');
+  const sensorChannelSelect = document.getElementById('sensorChannelSelect');
+  const nodeTypeSelect = document.getElementById('nodeTypeSelect');
+  const nodeIpAddress = document.getElementById('nodeIpAddress');
+  if (!kindSelect || !sensorFields || !nodeFields) return;
+
+  const isSensor = kindSelect.value !== 'node';
+  sensorFields.style.display = isSensor ? '' : 'none';
+  nodeFields.style.display = isSensor ? 'none' : '';
+
+  if (sensorTypeSelect) sensorTypeSelect.required = isSensor;
+  if (sensorChannelSelect) sensorChannelSelect.required = isSensor;
+  if (nodeTypeSelect) nodeTypeSelect.required = !isSensor;
+  if (nodeIpAddress) nodeIpAddress.required = !isSensor;
+}
+
+async function fetchGardenStatus(){
+  const r = await fetch('{{ url_for("garden_status", garden_id=garden.id) }}');
+  return await r.json();
+}
+
+async function loadGardenStatus(){
+  const data = await fetchGardenStatus();
+  if (!data.success) {
+    document.getElementById('gardenStatus').innerHTML = `<div class="text-danger">${data.error || 'Failed to load garden status'}</div>`;
+    return;
+  }
+  const channels = data.result.channels;
+  let html = `<div class="table-responsive"><table class="table align-middle mb-0"><thead><tr><th>Channel</th><th>Type</th><th>Voltage</th><th>Status</th></tr></thead><tbody>`;
+  for (const [ch, info] of Object.entries(channels)) {
+    let type = info.type || 'disabled';
+    const channelTypeLabels = {moisture: 'Resistive Soil Moisture Sensor', moisture_resistive: 'Resistive Soil Moisture Sensor', moisture_capacitive: 'Capacitive Soil Moisture Sensor', dht11: 'DHT11 Temperature / Humidity Sensor'};
+    let voltage = '--';
+    let status = 'Disabled';
+    if (info.reading) {
+      voltage = info.reading.voltage ?? '--';
+      if (type === 'moisture' || type === 'moisture_resistive' || type === 'moisture_capacitive') status = `${(info.reading.wet_percent || 0).toFixed(1)}% wet`;
+      else if (type === 'level' || type === 'liquid' || type === 'temperature' || type === 'dht11') status = info.reading.label || info.reading.state || '--';
+    }
+    const labelType = channelTypeLabels[type] || type;
+    html += `<tr><td>AIN${ch}</td><td>${labelType}</td><td>${voltage}</td><td>${status}</td></tr>`;
+  }
+  html += `</tbody></table></div>`;
+  document.getElementById('gardenStatus').innerHTML = html;
+}
+loadGardenStatus(); setInterval(loadGardenStatus,3000);
+
+async function refreshSchedule(){
+  const data = await fetchGardenStatus();
+  if (!data.success) return;
+  const s = data.result.schedule;
+  const manual = data.result.manual_override || {};
+  document.getElementById('schedState').textContent = s.enabled ? (s.active_now ? 'ARMED - ACTIVE NOW' : 'ARMED') : 'OFF';
+  document.getElementById('manualState').textContent = manual.enabled ? (manual.requested_on ? 'FORCED ON' : 'FORCED OFF') : 'CLEAR';
+}
+
+async function toggleSchedule(enabled){
+  await fetch('{{ url_for("garden_schedule_toggle", garden_id=garden.id) }}', {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({enabled})
+  });
+  refreshSchedule();
+}
+
+async function toggleGardenAutoWater(enabled){
+  await fetch('{{ url_for("garden_auto_water_toggle", garden_id=garden.id) }}', {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({enabled})
+  });
+  refreshSchedule();
+}
+
+async function setGardenPumpManual(enabled, requested_on){
+  const r = await fetch('{{ url_for("garden_pump_manual", garden_id=garden.id) }}', {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({enabled, requested_on})
+  });
+  const data = await r.json();
+  if (!data.success) alert(data.error || 'Manual pump request failed');
+  refreshSchedule();
+}
+
+refreshSchedule(); setInterval(refreshSchedule,2000);
+
+async function loadPicoNodes(){
+  const container = document.getElementById('picoNodes');
+  if (!container) return;
+
+  try {
+    const r = await fetch('{{ url_for("garden_pico_status", garden_id=garden.id) }}');
+    const data = await r.json();
+
+    if (!data.success) {
+      container.innerHTML = `<div class="text-danger">${data.error || 'Failed to load Pico W nodes'}</div>`;
+      return;
+    }
+
+    if (!data.nodes || data.nodes.length === 0) {
+      container.innerHTML = `<div class="muted">No WiFi nodes are attached to this garden yet.</div>`;
+      return;
+    }
+
+    let html = '';
+    for (const node of data.nodes) {
+      const st = node.status || {};
+      const online = !!st.online;
+      const payload = st.data || {};
+      const sensors = payload.sensors || payload.adc || {};
+      const gpio = payload.gpio || {};
+      const statusBadge = online
+        ? `<span class="badge bg-success">Online</span>`
+        : `<span class="badge bg-danger">Offline</span>`;
+
+      let sensorHtml = '';
+      if (Object.keys(sensors).length) {
+        sensorHtml += `<div class="small muted mb-1">Sensors</div>`;
+        sensorHtml += `<div class="table-responsive"><table class="table table-sm align-middle"><tbody>`;
+        for (const [key, val] of Object.entries(sensors)) {
+          if (typeof val === 'object' && val !== null) {
+            sensorHtml += `<tr><td>${key}</td><td><code>${JSON.stringify(val)}</code></td></tr>`;
+          } else {
+            sensorHtml += `<tr><td>${key}</td><td>${val}</td></tr>`;
+          }
+        }
+        sensorHtml += `</tbody></table></div>`;
+      } else {
+        sensorHtml = `<div class="muted small">No sensor data returned yet.</div>`;
+      }
+
+      let gpioHtml = '';
+      if (Object.keys(gpio).length) {
+        gpioHtml += `<div class="small muted mb-1 mt-2">GPIO</div>`;
+        gpioHtml += `<div class="d-flex flex-wrap gap-2">`;
+        for (const [pin, val] of Object.entries(gpio)) {
+          let state = val;
+          if (typeof val === 'object' && val !== null) state = val.state ?? val.value ?? 0;
+          const isHigh = state === 1 || state === true || state === '1' || state === 'HIGH' || state === 'high';
+          gpioHtml += `
+            <button class="btn btn-sm ${isHigh ? 'btn-success' : 'btn-outline-light'}"
+                    onclick="writePicoGpio('${node.ip_address}', ${parseInt(pin)}, ${isHigh ? 0 : 1})"
+                    ${online ? '' : 'disabled'}>
+              GPIO ${pin}: ${isHigh ? 'HIGH' : 'LOW'}
+            </button>`;
+        }
+        gpioHtml += `</div>`;
+      } else {
+        gpioHtml = `
+          <div class="small muted mt-2 mb-1">Quick GPIO Control</div>
+          <div class="input-group input-group-sm">
+            <input class="form-control" id="picoPin_${node.ip_address.replaceAll('.', '_')}" value="15" placeholder="GPIO pin">
+            <button class="btn btn-success" onclick="writePicoGpioFromInput('${node.ip_address}', 1)" ${online ? '' : 'disabled'}>HIGH</button>
+            <button class="btn btn-outline-light" onclick="writePicoGpioFromInput('${node.ip_address}', 0)" ${online ? '' : 'disabled'}>LOW</button>
+          </div>`;
+      }
+
+      html += `
+        <div class="col-lg-6">
+          <div class="card h-100">
+            <div class="card-header d-flex justify-content-between align-items-center">
+              <span>${node.label}</span>
+              ${statusBadge}
+            </div>
+            <div class="card-body">
+              <div class="mb-2"><span class="muted">IP:</span> ${node.ip_address || '-'}</div>
+              <div class="mb-2"><span class="muted">Role:</span> ${node.sensor_type || '-'} on ${node.channel_label || ('AIN' + (node.channel ?? '-'))}</div>
+              ${online ? '' : `<div class="alert alert-danger py-2">${st.error || 'Node did not respond.'}</div>`}
+              ${sensorHtml}
+              ${gpioHtml}
+            </div>
+          </div>
+        </div>`;
+    }
+
+    container.innerHTML = html;
+  } catch (err) {
+    container.innerHTML = `<div class="text-danger">Pico W status error: ${err}</div>`;
+  }
+}
+
+async function writePicoGpio(ipAddress, pin, state){
+  const r = await fetch('{{ url_for("garden_pico_gpio_write", garden_id=garden.id) }}', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ip_address: ipAddress, pin: pin, state: state})
+  });
+  const data = await r.json();
+  if (!data.success) alert(data.result?.error || data.error || 'GPIO write failed');
+  await loadPicoNodes();
+}
+
+function writePicoGpioFromInput(ipAddress, state){
+  const id = `picoPin_${ipAddress.replaceAll('.', '_')}`;
+  const pin = parseInt(document.getElementById(id).value || '15');
+  writePicoGpio(ipAddress, pin, state);
+}
+
+document.getElementById('pumpControllerSelect')?.addEventListener('change', syncPumpAssignmentFields);
+syncPumpAssignmentFields();
+syncAddDeviceFields();
+loadPicoNodes();
+setInterval(loadPicoNodes, 5000);
+
+</script>
+{% endblock %}

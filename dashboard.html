@@ -1,0 +1,137 @@
+{% extends "base.html" %}
+{% block title %}Dashboard - Cirkit Garden (Beta){% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div><h1 class="h3 mb-1">Dashboard</h1><div class="muted">Quick status for active gardens</div></div>
+  <span id="lastUpdate" class="badge badge-soft">Waiting...</span>
+</div>
+<div class="row g-3 mb-4">
+  <div class="col-md-3"><div class="card stat-card"><div class="card-body"><div class="muted">Active Gardens</div><div class="big-stat" id="activeGardens">--</div><div id="activeGardensDetail" class="muted">Configured gardens</div></div></div></div>
+  <div class="col-md-3"><div class="card stat-card"><div class="card-body"><div class="muted">Watering Now</div><div class="big-stat" id="wateringNow">--</div><div id="wateringNowDetail" class="muted">Pumps currently ON</div></div></div></div>
+  <div class="col-md-3"><div class="card stat-card"><div class="card-body"><div class="muted">Attention Needed</div><div class="big-stat" id="attentionNeeded">--</div><div id="attentionNeededDetail" class="muted">Gardens with alerts or watering requests</div></div></div></div>
+  <div class="col-md-3"><div class="card stat-card"><div class="card-body"><div class="muted">Mode</div><div class="big-stat" id="modeState">--</div><div id="modeDetail" class="muted">Hardware / Mock</div></div></div></div>
+</div>
+<div class="card mb-4">
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <span>Interlock Overview</span>
+    <span id="interlockStateBadge" class="badge text-bg-secondary">Loading...</span>
+  </div>
+  <div class="card-body">
+    <div class="row g-3 align-items-start">
+      <div class="col-md-4">
+        <div class="muted small">Gardens With Interlock Enabled</div>
+        <div class="big-stat" id="interlockEnabledState">--</div>
+        <div id="interlockEnabledDetail" class="muted">Per-garden interlock enablement</div>
+      </div>
+      <div class="col-md-4">
+        <div class="muted small">Gardens Reporting Interlock</div>
+        <div class="big-stat" id="interlockActiveGardens">--</div>
+        <div id="interlockActiveGardensDetail" class="muted">Gardens currently flagging interlock conditions</div>
+      </div>
+      <div class="col-md-4">
+        <div class="muted small">Gardens Blocked</div>
+        <div class="big-stat" id="interlockBlockedGardens">--</div>
+        <div id="interlockBlockedGardensDetail" class="muted">Gardens currently prevented from watering</div>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="row g-3">
+  <div class="col-lg-8"><div class="card"><div class="card-header">Active Garden Status</div><div class="card-body"><div class="table-responsive"><table class="table align-middle mb-0"><thead><tr><th>Garden</th><th>Pump</th><th>Schedule</th><th>Attention</th><th></th></tr></thead><tbody id="gardenStatusTable"><tr><td colspan="5" class="muted">Loading...</td></tr></tbody></table></div></div></div></div>
+  <div class="col-lg-4"><div class="card"><div class="card-header">Quick Links</div><div class="card-body d-grid gap-2"><a class="btn btn-outline-light" href="{{ url_for('garden') }}">Go to Garden</a><a class="btn btn-outline-light" href="{{ url_for('schedule_page') }}">Go to Schedule</a><a class="btn btn-outline-light" href="{{ url_for('settings_page') }}">Go to System</a></div></div></div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+function esc(v){
+  return String(v ?? '').replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;').replaceAll("'", '&#39;');
+}
+function badgeClass(kind){
+  if (kind === 'danger') return 'text-bg-danger';
+  if (kind === 'success') return 'text-bg-success';
+  if (kind === 'warning') return 'text-bg-warning';
+  return 'text-bg-secondary';
+}
+async function loadDashboardStatus(){
+  const r = await fetch('{{ url_for("dashboard_status") }}');
+  const data = await r.json();
+  const summary = data.summary || {};
+  const gardens = data.garden_statuses || [];
+  const interlockEnabledGardens = summary.interlock_enabled_gardens ?? 0;
+  const interlockActiveGardens = summary.interlock_active_gardens ?? 0;
+  const interlockBlockedGardens = summary.interlock_blocked_gardens ?? 0;
+  document.getElementById('activeGardens').textContent = summary.active_gardens ?? 0;
+  document.getElementById('wateringNow').textContent = summary.watering_now ?? 0;
+  document.getElementById('attentionNeeded').textContent = summary.attention_needed ?? 0;
+  document.getElementById('modeState').textContent = data.mock ? 'MOCK' : 'LIVE';
+  document.getElementById('modeDetail').textContent = data.mock ? 'Simulation mode' : 'Hardware mode';
+  document.getElementById('activeGardensDetail').textContent = `${summary.armed_schedules ?? 0} schedule(s) armed`;
+  document.getElementById('wateringNowDetail').textContent = gardens.length ? 'Pumps currently ON' : 'No gardens configured';
+  document.getElementById('attentionNeededDetail').textContent = (summary.attention_needed ?? 0) > 0 ? 'Review highlighted gardens' : 'No immediate issues';
+  const interlockStateBadge = document.getElementById('interlockStateBadge');
+  const interlockEnabledState = document.getElementById('interlockEnabledState');
+  const interlockEnabledDetail = document.getElementById('interlockEnabledDetail');
+  const interlockActiveGardensEl = document.getElementById('interlockActiveGardens');
+  const interlockActiveGardensDetail = document.getElementById('interlockActiveGardensDetail');
+  const interlockBlockedGardensEl = document.getElementById('interlockBlockedGardens');
+  const interlockBlockedGardensDetail = document.getElementById('interlockBlockedGardensDetail');
+  interlockEnabledState.textContent = interlockEnabledGardens;
+  interlockEnabledDetail.textContent = interlockEnabledGardens > 0 ? 'Gardens where interlock can block watering when triggered' : 'No gardens currently have interlock enabled';
+  interlockActiveGardensEl.textContent = interlockActiveGardens;
+  interlockActiveGardensDetail.textContent = interlockActiveGardens > 0 ? 'Gardens currently reporting an interlock condition' : 'No gardens are currently reporting interlock conditions';
+  interlockBlockedGardensEl.textContent = interlockBlockedGardens;
+  interlockBlockedGardensDetail.textContent = interlockBlockedGardens > 0 ? 'Gardens currently blocked from watering by interlock' : 'No gardens are currently blocked by interlock';
+  if (interlockEnabledGardens <= 0) {
+    interlockStateBadge.className = 'badge text-bg-secondary';
+    interlockStateBadge.textContent = 'Disabled';
+  } else if (interlockBlockedGardens > 0) {
+    interlockStateBadge.className = 'badge text-bg-danger';
+    interlockStateBadge.textContent = `${interlockBlockedGardens} blocked`;
+  } else if (interlockActiveGardens > 0) {
+    interlockStateBadge.className = 'badge text-bg-warning';
+    interlockStateBadge.textContent = `${interlockActiveGardens} active`;
+  } else {
+    interlockStateBadge.className = 'badge text-bg-success';
+    interlockStateBadge.textContent = `${interlockEnabledGardens} enabled / clear`;
+  }
+  document.getElementById('lastUpdate').textContent = 'Updated ' + new Date().toLocaleTimeString();
+  const tbody = document.getElementById('gardenStatusTable');
+  if (!gardens.length) {
+    tbody.innerHTML = '<tr><td colspan="5" class="muted">No gardens configured yet.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = gardens.map((item) => {
+    const garden = item.garden || {};
+    const result = item.result || {};
+    const summary = item.summary || {};
+    const schedule = result.schedule || {};
+    const interlock = result.interlock || {};
+    const pumpState = result.pump_state || '--';
+    const pumpReason = result.pump_reason || '--';
+    const scheduleLabel = schedule.enabled ? (schedule.active_now ? 'ARMED / ACTIVE' : 'ARMED') : 'OFF';
+    let attentionLabel = 'Clear';
+    let attentionKind = 'success';
+    if (interlock.active) {
+      attentionLabel = pumpReason === 'INTERLOCK' ? 'Blocked by Interlock' : 'Interlock Active';
+      attentionKind = pumpReason === 'INTERLOCK' ? 'danger' : 'warning';
+    } else if ((summary.refill_alert_count || 0) > 0) {
+      attentionLabel = 'Refill Needed';
+      attentionKind = 'danger';
+    } else if ((summary.moisture_request_count || 0) > 0) {
+      attentionLabel = 'Dry Soil';
+      attentionKind = 'warning';
+    }
+    const meta = [garden.location, `${summary.enabled_channel_count || 0} sensor(s)`].filter(Boolean).join(' • ');
+    return `<tr>
+      <td><div class="fw-semibold">${esc(garden.name || 'Garden')}</div><div class="muted small">${esc(meta)}</div></td>
+      <td><div>${esc(pumpState)}</div><div class="muted small">${esc(pumpReason)}</div></td>
+      <td><div>${esc(scheduleLabel)}</div><div class="muted small">${esc(schedule.start || '--')} - ${esc(schedule.stop || '--')}</div></td>
+      <td><span class="badge ${badgeClass(attentionKind)}">${esc(attentionLabel)}</span></td>
+      <td class="text-end"><a class="btn btn-sm btn-outline-light" href="/garden/${encodeURIComponent(garden.id)}">Open</a></td>
+    </tr>`;
+  }).join('');
+}
+loadDashboardStatus();
+setInterval(loadDashboardStatus, 3000);
+</script>
+{% endblock %}
