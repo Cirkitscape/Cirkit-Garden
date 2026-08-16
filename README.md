@@ -1,19 +1,20 @@
 # Cirkit Garden (Beta)
 
-Cirkit Garden is a self-hosted Raspberry Pi garden control app for local watering automation, sensor monitoring, and browser-based garden management.
+Cirkit Garden is a Raspberry Pi garden control app built for the CirkitScape Top HAT.
 
-It is designed as a maker-focused, self-hosted beta for people who want to run their own garden controller locally, manage multiple gardens from a web UI, and experiment with direct sensors, WiFi-connected nodes, schedules, pump control, and interlocks.
+It is intended to run on a Raspberry Pi with the CirkitScape Top HAT setup environment, providing browser-based garden management, pump control, sensor monitoring, scheduling, interlocks, and WiFi node support.
 
 ## Status
 
-**Public beta / self-hosted project**
+**Beta software for Raspberry Pi + CirkitScape Top HAT systems**
 
-This repository is currently best suited for:
-- Raspberry Pi or local Linux deployments
-- LAN-only use
-- users comfortable with wiring, GPIO, local networking, and hands-on troubleshooting
+This repository is intended for:
+- Raspberry Pi deployments
+- CirkitScape Top HAT-based setups
+- local network access
+- users comfortable with wiring, GPIO, I²C/UART setup, and hands-on troubleshooting
 
-This is **not yet a plug-and-play consumer installer**.
+This is **not a general-purpose cross-platform installer**.
 
 ## What it currently does
 
@@ -41,7 +42,9 @@ Core pieces in this repo:
 - `requirements.txt` — Python dependencies
 - `settings.db` — SQLite database created automatically on first run
 
-The app is built around a Raspberry Pi host with support for:
+The app is built around:
+- a Raspberry Pi host
+- the CirkitScape Top HAT setup environment
 - native Raspberry Pi GPIO
 - MCP23017 GPIO expansion
 - direct analog sensors
@@ -49,29 +52,52 @@ The app is built around a Raspberry Pi host with support for:
 
 ## Intended deployment model
 
-Recommended for now:
-- run on your own Raspberry Pi with Cirkitscape Top HAT
-- access it from your LAN
-- use mock mode first while validating UI and behavior
-- verify all wiring, thresholds, and automation behavior before relying on unattended watering
+Recommended usage:
+- run on a Raspberry Pi
+- use the CirkitScape Top HAT setup script first
+- access the app from your local network
+- validate wiring, GPIO mappings, sensor behavior, and pump logic before unattended use
 
-## Quick start
+## Installation
 
-### 1. Clone the repository
+### 1. Set up the Raspberry Pi with the CirkitScape Top HAT setup script
+
+Use the official setup repo:
+
+- `https://github.com/Cirkitscape/Top_HAT_Setup`
+
+Example:
 
 ```bash
-git clone <your-repo-url>
+git clone https://github.com/Cirkitscape/Top_HAT_Setup.git
+cd Top_HAT_Setup
+chmod +x TopHAT_setup.sh
+./TopHAT_setup.sh
+```
+
+That script sets up:
+- required system packages
+- I²C support
+- UART support
+- a Python virtual environment at `~/myproject/venv`
+- common Python dependencies used for Top HAT / ADC work
+
+If I²C or UART were just enabled, reboot the Pi before continuing.
+
+Activate the created environment:
+
+```bash
+source ~/myproject/venv/bin/activate
+```
+
+### 2. Clone the Cirkit Garden repository
+
+```bash
+git clone https://github.com/Cirkitscape/Cirkit-Garden
 cd CirkitGarden
 ```
 
-### 2. Create a virtual environment
-
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-```
-
-### 3. Install dependencies
+### 3. Install Cirkit Garden Python dependencies
 
 ```bash
 pip install --upgrade pip
@@ -80,11 +106,10 @@ pip install -r requirements.txt
 
 ### 4. Set environment variables
 
-Minimum recommended setup for a first run:
+Required:
 
 ```bash
 export FLASK_SECRET_KEY='replace-this-with-a-random-secret'
-export GARDENPI_MOCK=1
 ```
 
 Optional for WiFi node API access:
@@ -100,7 +125,7 @@ python GardenPi.py
 ```
 
 Then open:
-- `http://127.0.0.1:5000` on the same machine, or
+- `http://127.0.0.1:5000` on the Pi, or
 - `http://<your-pi-lan-ip>:5000` from another device on your LAN
 
 ## First-run behavior
@@ -114,25 +139,13 @@ On first run, the app will:
 ## Environment variables
 
 ### `FLASK_SECRET_KEY`
-Required for any real deployment.
+Required.
 
 Example:
 
 ```bash
 export FLASK_SECRET_KEY='use-a-long-random-value-here'
 ```
-
-### `GARDENPI_MOCK`
-Set to `1` to force mock mode.
-
-```bash
-export GARDENPI_MOCK=1
-```
-
-Mock mode is recommended for:
-- development on non-Pi systems
-- UI testing
-- source evaluation before hardware is wired up
 
 ### `PICO_API_KEY`
 Optional shared API key for Pico/WiFi node communication.
@@ -147,22 +160,16 @@ Current Python dependencies in `requirements.txt`:
 - Flask
 - requests
 
-The app also attempts to use optional hardware-specific modules at runtime when not in mock mode, including:
+The app also attempts to use hardware-specific modules at runtime, including:
 - `adc_reader`
 - `mcp_gpio`
 - `RPi.GPIO`
 
-Those hardware modules are **not required for mock mode**.
-
-If the target hardware modules are unavailable, run with:
-
-```bash
-export GARDENPI_MOCK=1
-```
+These are expected as part of the Raspberry Pi / Top HAT environment.
 
 ## Hardware notes
 
-Cirkit Garden is structured around a Raspberry Pi garden hub with optional expansion and remote-node support.
+Cirkit Garden is structured around a Raspberry Pi garden hub with CirkitScape Top HAT support.
 
 Examples of the current model include:
 - direct analog sensor inputs
@@ -171,11 +178,7 @@ Examples of the current model include:
 - Raspberry Pi GPIO outputs
 - WiFi node devices for remote sensing or control
 
-Real hardware deployment may require you to provide or adapt:
-- an ADC reader implementation
-- MCP23017 GPIO helper support
-- Raspberry Pi GPIO access on the target host
-- matching firmware/config for any WiFi-connected node devices
+Real deployment may require matching hardware wiring and node-side firmware/config depending on your attached sensors and nodes.
 
 ## Data and persistence
 
@@ -206,7 +209,7 @@ Diagnostic endpoints:
 - `/health`
 - `/diag`
 
-## Development notes
+## Development / maintenance notes
 
 Basic syntax check:
 
@@ -214,33 +217,22 @@ Basic syntax check:
 python -m py_compile GardenPi.py
 ```
 
-Common local dev flow:
+Typical run flow on the Pi:
 
 ```bash
-export FLASK_SECRET_KEY='dev-secret'
-export GARDENPI_MOCK=1
+source ~/myproject/venv/bin/activate
+export FLASK_SECRET_KEY='your-secret'
 python GardenPi.py
 ```
 
 ## Known limitations
 
 - beta-quality software
-- optimized for local/self-hosted use, not public internet exposure
-- no packaged installer yet
-- no containerized deployment included yet
-- hardware integration details may require customization for your setup
-- diagnostics/system views are oriented toward operator visibility and development
+- intended for Raspberry Pi + CirkitScape Top HAT use
+- not designed for public internet exposure
+- no packaged installer for non-Top-HAT environments
+- hardware integration details may still require customization for your exact setup
 - real-world sensor calibration and watering behavior should be validated on your hardware
-
-## Roadmap direction
-
-Areas that would make public self-hosting easier:
-- packaged installer or setup script
-- sample `.env` file
-- systemd service example
-- clearer hardware integration docs
-- repeatable staging/test flow
-- optional containerized development workflow
 
 ## Safety note
 
@@ -248,4 +240,4 @@ This software can control pumps and respond to sensor inputs. Test carefully bef
 
 ## License
 
-This project includes an **AGPL-3.0** license. See `LICENSE` for the full text.
+This project includes an **Apache License 2.0** license. See `LICENSE` for the full text.
